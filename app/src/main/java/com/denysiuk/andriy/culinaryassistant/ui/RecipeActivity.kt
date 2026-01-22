@@ -1,30 +1,27 @@
 package com.denysiuk.andriy.culinaryassistant.ui
 
 import android.content.Intent
-import android.net.Uri
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -42,22 +39,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.MultiParagraph
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
 import com.bumptech.glide.integration.compose.GlideImage
@@ -72,7 +64,7 @@ class RecipeActivity(val id: Int) {
 }
 @OptIn(ExperimentalGlideComposeApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun loadRecipe(id: String, viewModel: RecipeViewModel = hiltViewModel()) {
+fun loadRecipe(id: String, viewModel: RecipeViewModel = hiltViewModel(), goBack: () -> Unit) {
     val state: RecipeState by viewModel.state.collectAsState()
     viewModel.handle(CulinaryIntent.requestRecipe(id))
     val recipe: DetailedRecipe = state.recipe
@@ -83,7 +75,7 @@ fun loadRecipe(id: String, viewModel: RecipeViewModel = hiltViewModel()) {
         viewModel.effect.collect { effect ->
             when (effect) {
                 is UiEffect.OpenWebPage -> {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(effect.url))
+                    val intent = Intent(Intent.ACTION_VIEW, effect.url.toUri())
                     context.startActivity(intent)
                 }
             }
@@ -97,6 +89,9 @@ fun loadRecipe(id: String, viewModel: RecipeViewModel = hiltViewModel()) {
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.primary,
                 ),
+                navigationIcon = {
+                    Image(painter = painterResource(R.drawable.ic_arrow_back_24), contentDescription = "back", modifier = Modifier.clickable(true) { goBack.invoke() }.widthIn(25.dp, 30.dp).fillMaxWidth(0.2f).aspectRatio(1.0F))
+                },
                 title = {
                     Row {
                         Text(recipe.title, modifier = Modifier.weight(75.0f)
@@ -114,7 +109,7 @@ fun loadRecipe(id: String, viewModel: RecipeViewModel = hiltViewModel()) {
                                 painter = painterResource(R.drawable.ic_source_24),
                                 contentDescription = "ImageSource",
                                 alignment = Alignment.TopEnd,
-                                colorFilter = ColorFilter.Companion.tint(MaterialTheme.colorScheme.primary)
+                                colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary)
                             )
                             var size by remember { mutableStateOf(15.sp) }
                             Text(text = recipe.author, maxLines = 1, fontSize = size, onTextLayout = {
@@ -131,18 +126,39 @@ fun loadRecipe(id: String, viewModel: RecipeViewModel = hiltViewModel()) {
         Surface(modifier = Modifier.fillMaxSize()
             .padding(innerPadding)
         ) {
-                Column() { //Ingredients
-                    Text(text = stringResource(R.string.ingredients_text), fontSize = 20.sp)
-                    LazyColumn(modifier = Modifier.weight(20.0f)) {
-                        items(recipe.ingredients) { ingredient ->
-                            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                                Text(
-                                    text = ingredient.name + " " + NumberFormat.getInstance().format(ingredient.amount) + " " + ingredient.unit,
+                Column() {
+                    var ingredientsExpanded by remember { mutableStateOf(false) }
+                    Column(modifier = Modifier.wrapContentHeight().animateContentSize()
+                            .clickable(true) { ingredientsExpanded = !ingredientsExpanded }
+                            .weight(30.0f, false)) { //Ingredients
+                        Row(
+                            modifier = Modifier.fillMaxWidth()
+                                .padding(5.dp, 5.dp)
+                        ) {
+                            Text(text = stringResource(R.string.ingredients_text), fontSize = 20.sp)
+                            Image(
+                                painter = painterResource(R.drawable.ic_arrow_down_no_body_24dp),
+                                contentDescription = "ArrowDown",
+                                colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.inverseSurface)
+                            )
+                        }
+                        if (ingredientsExpanded) {
+                            LazyColumn() {
+                                items(recipe.ingredients) { ingredient ->
+                                    Row(
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = ingredient.name + " " + NumberFormat.getInstance()
+                                                .format(ingredient.amount) + " " + ingredient.unit,
 //                                    modifier = Modifier.height(10.dp),
-                                    fontSize = 15.sp,
-                                    modifier = Modifier.padding(0.dp, 0.dp)
-                                )
-                                //Text(text = ingredient.state, fontSize = 15.sp, maxLines = 1,) //modifier = Modifier.padding(2.dp, 0.dp))
+                                            fontSize = 15.sp,
+                                            modifier = Modifier.padding(0.dp, 0.dp)
+                                        )
+                                        //Text(text = ingredient.state, fontSize = 15.sp, maxLines = 1,) //modifier = Modifier.padding(2.dp, 0.dp))
+                                    }
+                                }
                             }
                         }
                     }
@@ -213,6 +229,9 @@ fun previewRecipe(){
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.primary,
                 ),
+                navigationIcon = {
+                    Image(painter = painterResource(R.drawable.ic_arrow_back_24), contentDescription = "back")
+                },
                 title = {
                     Row {
                         Text("Title")
@@ -224,7 +243,7 @@ fun previewRecipe(){
                                 painter = painterResource(R.drawable.ic_source_24),
                                 contentDescription = "ImageSource",
                                 alignment = Alignment.TopEnd,
-                                colorFilter = ColorFilter.Companion.tint(MaterialTheme.colorScheme.primary)
+                                colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary)
                             )
                             Text(text = "Author", maxLines = 1)
                         }
@@ -235,104 +254,116 @@ fun previewRecipe(){
     ) { innerPadding ->
         Surface() {
             Column(Modifier.padding(innerPadding)) {
-                Column(modifier = Modifier.weight(20.0f)) { //Ingredients
-                    Text(text = stringResource(R.string.ingredients_text), fontSize = 20.sp)
-                    LazyColumn(
-                        contentPadding = PaddingValues(2.dp, 0.dp),
-                        modifier = Modifier.padding(0.dp)
+                var ingredientsExpanded by remember { mutableStateOf(true) }
+                Column(modifier = Modifier.wrapContentHeight().animateContentSize()
+                    .clickable(true) { ingredientsExpanded = !ingredientsExpanded }.weight(30.0f, false)) { //Ingredients
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                            .padding(5.dp, 5.dp)
                     ) {
-                        items(
-                            listOf(
-                                Ingredient(
-                                    name = "additional toppings : avocado",
-                                    amount = 8.0,
-                                    unit = "servings",
-                                    state = "additional toppings : diced avocado,micro greens,chopped basil"
-                                ),
-                                Ingredient(
-                                    name = "carrots",
-                                    amount = 3.0,
-                                    unit = "medium",
-                                    state = "carrots, peeled and diced"
-                                ),
-                                Ingredient(
-                                    name = "celery stalks",
-                                    amount = 3.0,
-                                    unit = "",
-                                    state = "celery stalks, diced"
-                                ),
-                                Ingredient(
-                                    name = "chicken breast",
-                                    amount = 2.0,
-                                    unit = "cups",
-                                    state = "fully-cooked chicken breast, shredded (may be omitted for a vegetarian version)"
-                                ),
-                                Ingredient(
-                                    name = "flat leaf parsley",
-                                    amount = 0.5,
-                                    unit = "cup",
-                                    state = "flat leaf Italian parsley, chopped (plus extra for garnish)"
-                                ),
-                                Ingredient(
-                                    name = "garlic",
-                                    amount = 6.0,
-                                    unit = "cloves",
-                                    state = "garlic, finely minced"
-                                ),
-                                Ingredient(
-                                    name = "olive oil",
-                                    amount = 2.0,
-                                    unit = "tablespoons",
-                                    state = "olive oil"
-                                ),
-                                Ingredient(
-                                    name = "canned tomatoes",
-                                    amount = 28.0,
-                                    unit = "ounce",
-                                    state = "can plum tomatoes, drained and rinsed, chopped"
-                                ),
-                                Ingredient(
-                                    name = "lentils",
-                                    amount = 2.0,
-                                    unit = "cups",
-                                    state = "dried red lentils, rinsed"
-                                ),
-                                Ingredient(
-                                    name = "salt and pepper",
-                                    amount = 8.0,
-                                    unit = "servings",
-                                    state = "salt and black pepper, to taste"
-                                ),
-                                Ingredient(
-                                    name = "turnip",
-                                    amount = 1.0,
-                                    unit = "large",
-                                    state = "turnip, peeled and diced"
-                                ),
-                                Ingredient(
-                                    name = "vegetable stock",
-                                    amount = 8.0,
-                                    unit = "cups",
-                                    state = "vegetable stock"
-                                ),
-                                Ingredient(
-                                    name = "onion",
-                                    amount = 1.0,
-                                    unit = "medium",
-                                    state = "yellow onion, diced"
+                        Text(text = stringResource(R.string.ingredients_text), fontSize = 20.sp)
+                        Image(
+                            painter = painterResource(R.drawable.ic_arrow_down_no_body_24dp),
+                            contentDescription = "ArrowDown",
+                            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.inverseSurface)
+
+                        )
+                    }
+                    if (ingredientsExpanded) {
+                        LazyColumn() {
+                            items(
+                                listOf(
+                                    Ingredient(
+                                        name = "additional toppings : avocado",
+                                        amount = 8.0,
+                                        unit = "servings",
+                                        state = "additional toppings : diced avocado,micro greens,chopped basil"
+                                    ),
+                                    Ingredient(
+                                        name = "carrots",
+                                        amount = 3.0,
+                                        unit = "medium",
+                                        state = "carrots, peeled and diced"
+                                    ),
+                                    Ingredient(
+                                        name = "celery stalks",
+                                        amount = 3.0,
+                                        unit = "",
+                                        state = "celery stalks, diced"
+                                    ),
+                                    Ingredient(
+                                        name = "chicken breast",
+                                        amount = 2.0,
+                                        unit = "cups",
+                                        state = "fully-cooked chicken breast, shredded (may be omitted for a vegetarian version)"
+                                    ),
+                                    Ingredient(
+                                        name = "flat leaf parsley",
+                                        amount = 0.5,
+                                        unit = "cup",
+                                        state = "flat leaf Italian parsley, chopped (plus extra for garnish)"
+                                    ),
+                                    Ingredient(
+                                        name = "garlic",
+                                        amount = 6.0,
+                                        unit = "cloves",
+                                        state = "garlic, finely minced"
+                                    ),
+                                    Ingredient(
+                                        name = "olive oil",
+                                        amount = 2.0,
+                                        unit = "tablespoons",
+                                        state = "olive oil"
+                                    ),
+                                    Ingredient(
+                                        name = "canned tomatoes",
+                                        amount = 28.0,
+                                        unit = "ounce",
+                                        state = "can plum tomatoes, drained and rinsed, chopped"
+                                    ),
+                                    Ingredient(
+                                        name = "lentils",
+                                        amount = 2.0,
+                                        unit = "cups",
+                                        state = "dried red lentils, rinsed"
+                                    ),
+                                    Ingredient(
+                                        name = "salt and pepper",
+                                        amount = 8.0,
+                                        unit = "servings",
+                                        state = "salt and black pepper, to taste"
+                                    ),
+                                    Ingredient(
+                                        name = "turnip",
+                                        amount = 1.0,
+                                        unit = "large",
+                                        state = "turnip, peeled and diced"
+                                    ),
+                                    Ingredient(
+                                        name = "vegetable stock",
+                                        amount = 8.0,
+                                        unit = "cups",
+                                        state = "vegetable stock"
+                                    ),
+                                    Ingredient(
+                                        name = "onion",
+                                        amount = 1.0,
+                                        unit = "medium",
+                                        state = "yellow onion, diced"
+                                    )
                                 )
-                            )
-                        ) { ingredient ->
-                            Row(
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = ingredient.name + " " + NumberFormat.getInstance()
-                                        .format(ingredient.amount) + " " + ingredient.unit,
-                                    fontSize = 15.sp,
-                                )
-                                //Text(text = ingredient.state, fontSize = 15.sp, maxLines = 1,) //modifier = Modifier.padding(2.dp, 0.dp))
+                            ) { ingredient ->
+                                Row(
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = ingredient.name + " " + NumberFormat.getInstance()
+                                            .format(ingredient.amount) + " " + ingredient.unit,
+                                        fontSize = 15.sp,
+                                    )
+                                    //Text(text = ingredient.state, fontSize = 15.sp, maxLines = 1,) //modifier = Modifier.padding(2.dp, 0.dp))
+                                }
                             }
                         }
                     }
